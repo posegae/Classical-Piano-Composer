@@ -1,5 +1,6 @@
 """ This module prepares midi file data and feeds it to the neural
     network for training """
+import os
 import glob
 import pickle
 import numpy
@@ -14,21 +15,19 @@ from keras.callbacks import ModelCheckpoint
 
 def train_network():
     """ Train a Neural Network to generate music """
-    notes = get_notes_and_offsets()
+    notes = get_notes_and_durations()
 
     # get amount of pitch names
     n_vocab = len(set(notes))
-    print(len(notes))
-    print(n_vocab)
 
-    network_input, network_output = prepare_sequences_with_offset(notes, n_vocab)
+    network_input, network_output = prepare_sequences_with_durations(notes, n_vocab)
 
     model = create_network(network_input, n_vocab)
 
     train(model, network_input, network_output)
-def get_notes_and_offsets():
+def get_notes_and_durations():
     """ Get all the notes and chords from the midi files in the ./midi_songs directory
-        Also gets the offsets"""
+        Also gets the durations"""
     notes = []
 
     for file in glob.glob('midi_music_pop/*.mid'):
@@ -43,27 +42,30 @@ def get_notes_and_offsets():
         for element in notes_to_parse:
             if isinstance(element, note.Note):
                 pitch = str(element.pitch)
-                offset = str(element.duration)
-                notes.append((pitch, offset))
+                duration = str(float(element.duration.quarterLength))
+                notes.append((pitch, duration))
             elif isinstance(element, chord.Chord):
                 pitches = '.'.join(str(n) for n in element.normalOrder)
-                offset = str(element.duration)
-                notes.append((pitches, offset))
+                duration = str(float(element.duration.quarterLength))
+                notes.append((pitches, duration))
 
+    try:
+        os.makedirs('data')
+    except:
+        pass
     with open('data/notes', 'wb') as filepath:
         pickle.dump(notes, filepath)
 
-    # print(notes)
     return notes
 
-def prepare_sequences_with_offset(notes, n_vocab):
-    ''' Prepare the sequences used by the NN. Adapted to account for offsets '''
+def prepare_sequences_with_durations(notes, n_vocab):
+    ''' Prepare the sequences used by the NN. Adapted to account for durations '''
     sequence_length = 100
-    raw_pitch_offset_names = sorted(notes, key=lambda x: x[0])
-    raw_pitch_offset_names = set(notes)
+    raw_pitch_duration_names = sorted(notes, key=lambda x: x[0])
+    raw_pitch_duration_names = set(notes)
 
-    # Dictionary that maps (pitch, offset) tuples to integers
-    pitch_offset_to_int = dict((raw_pitch_offset_names, number) for number, raw_pitch_offset_names in enumerate(raw_pitch_offset_names))
+    # Dictionary that maps (pitch, duration) tuples to integers
+    pitch_duration_to_int = dict((raw_pitch_duration_names, number) for number, raw_pitch_duration_names in enumerate(raw_pitch_duration_names))
 
     network_input = []
     network_output = []
@@ -71,23 +73,15 @@ def prepare_sequences_with_offset(notes, n_vocab):
     for i in range(0, len(notes) - sequence_length, 1):
         sequence_in = notes[i:i + sequence_length]
         sequence_out = notes[i + sequence_length]
-        network_input.append([pitch_offset_to_int[char] for char in sequence_in])
-        network_output.append(pitch_offset_to_int[sequence_out])
+        network_input.append([pitch_duration_to_int[char] for char in sequence_in])
+        network_output.append(pitch_duration_to_int[sequence_out])
     n_patterns = len(network_input)
-
-    # print(network_input)
-    # network_input_lengths = [len(n) for n in network_input]
-    # print(len(set(network_input_lengths)))
 
     network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 1))
 
     network_input = network_input / float(n_vocab)
 
-    print(sorted(network_output))
-    # print(len(set(network_output)))
     network_output = np_utils.to_categorical(network_output)
-    print(network_input.shape)
-    print(network_output.shape)
     return (network_input, network_output)
 
 
