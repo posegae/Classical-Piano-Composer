@@ -71,7 +71,7 @@ def create_network(network_input, n_vocab):
 
     # Load the weights to each node
     # model.load_weights('best-weights-without-rests.hdf5')
-    model.load_weights('duration-trained/weights-improvement-05-4.7848-bigger.hdf5')
+    model.load_weights('weights-improvement-23-4.4086-bigger.hdf5')
 
     return model
 
