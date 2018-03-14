@@ -14,19 +14,22 @@ from keras.callbacks import ModelCheckpoint
 
 def train_network():
     """ Train a Neural Network to generate music """
-    notes = get_notes_and_durations()
+    notes = get_notes_and_offsets()
 
     # get amount of pitch names
     n_vocab = len(set(notes))
 
-    network_input, network_output = prepare_sequences_with_durations(notes, n_vocab)
+    network_input, network_output = prepare_sequences_with_offsets(notes, n_vocab)
 
     model = create_network(network_input, n_vocab)
 
     train(model, network_input, network_output)
-def get_notes_and_durations():
+def get_notes_and_offsets():
     """ Get all the notes and chords from the midi files in the ./midi_songs directory
-        Also gets the durations"""
+        Also gets the offsets
+
+        Here, offset really refers to the length of time between each note.
+        """
     notes = []
 
     for file in glob.glob('midi_music_pop/*.mid'):
@@ -38,32 +41,32 @@ def get_notes_and_durations():
         else:
             notes_to_parse = midi.flat.notes
 
+        prev_note_offset = 0
         for element in notes_to_parse:
             if isinstance(element, note.Note):
                 pitch = str(element.pitch)
-                duration = element.duration.quarterLength
-                notes.append((pitch, duration))
+                offset = element.offset - prev_note_offset
+                notes.append((pitch, offset))
+                prev_note_offset += offset
             elif isinstance(element, chord.Chord):
                 pitches = '.'.join(str(n) for n in element.normalOrder)
-                duration = element.duration.quarterLength
-                notes.append((pitches, duration))
+                offset = element.offset - prev_note_offset
+                notes.append((pitches, offset))
+                prev_note_offset += offset
 
     with open('data/notes', 'wb') as filepath:
         pickle.dump(notes, filepath)
 
-    # print(notes)
-    all_durations = [float(x[1]) for x in notes]
-    all_durations = set(all_durations)
     return notes
 
-def prepare_sequences_with_durations(notes, n_vocab):
-    ''' Prepare the sequences used by the NN. Adapted to account for durations '''
+def prepare_sequences_with_offsets(notes, n_vocab):
+    ''' Prepare the sequences used by the NN. Adapted to account for offsets '''
     sequence_length = 100
-    raw_pitch_duration_names = sorted(notes, key=lambda x: x[0])
-    raw_pitch_duration_names = set(notes)
+    raw_pitch_offset_names = sorted(notes, key=lambda x: x[0])
+    raw_pitch_offset_names = set(notes)
 
-    # Dictionary that maps (pitch, duration) tuples to integers
-    pitch_duration_to_int = dict((raw_pitch_duration_names, number) for number, raw_pitch_duration_names in enumerate(raw_pitch_duration_names))
+    # Dictionary that maps (pitch, offset) tuples to integers
+    pitch_offset_to_int = dict((raw_pitch_offset_names, number) for number, raw_pitch_offset_names in enumerate(raw_pitch_offset_names))
 
     network_input = []
     network_output = []
@@ -71,23 +74,16 @@ def prepare_sequences_with_durations(notes, n_vocab):
     for i in range(0, len(notes) - sequence_length, 1):
         sequence_in = notes[i:i + sequence_length]
         sequence_out = notes[i + sequence_length]
-        network_input.append([pitch_duration_to_int[char] for char in sequence_in])
-        network_output.append(pitch_duration_to_int[sequence_out])
+        network_input.append([pitch_offset_to_int[char] for char in sequence_in])
+        network_output.append(pitch_offset_to_int[sequence_out])
     n_patterns = len(network_input)
-
-    # print(network_input)
-    # network_input_lengths = [len(n) for n in network_input]
-    # print(len(set(network_input_lengths)))
 
     network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 1))
 
     network_input = network_input / float(n_vocab)
 
-    # print(sorted(network_output))
-    # print(len(set(network_output)))
     network_output = np_utils.to_categorical(network_output)
-    # print(network_input.shape)
-    # print(network_output.shape)
+
     return (network_input, network_output)
 
 
