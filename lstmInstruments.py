@@ -11,6 +11,8 @@ from keras.layers import LSTM
 from keras.layers import Activation
 from keras.utils import np_utils
 from keras.callbacks import ModelCheckpoint
+from keras import backend as K
+
 
 def train_network():
     """ Train a Neural Network to generate music """
@@ -18,8 +20,6 @@ def train_network():
 
     # get amount of pitch names
     n_vocab = len(set(notes))
-    print(len(notes))
-    print(n_vocab)
 
     network_input, network_output = prepare_sequences_with_instruments(notes, n_vocab)
 
@@ -31,20 +31,19 @@ def get_notes_and_instruments(): #goal here is to get sequences based on instrum
     """ Get all the notes and chords from the midi files in the ./midi_songs directory """
     notes = []
 
-    #beethovenCorpus = corpus.getComposer('beethoven', 'xml')
-    #for xml in beethovenCorpus:
-    for file in glob.glob("midi_music_pop/*.mid"):
-        #midi = corpus.parse(xml)
+   
+    for file in glob.glob("genreFolder/*.mid"):
+       
         midi = converter.parse(file)
         notes_to_parse = None
         instrumentalNotes = [] #This will hold note objects with instrument info.
         parts = instrument.partitionByInstrument(midi)
-
+        
         if parts: # file has instrument parts. Originally, the assumption is that only one instrument will exist. This is not, in fact, true. So, we will do this:
 
-            # print (len(parts))
-            # parts.show('text')
-
+            
+            
+            
             for part in parts:
                 instrumentName = part.getInstrument() #BTW, we're assuming that one part will only have one instrument, not multiple embedded into it.
                 print (instrumentName)
@@ -55,7 +54,7 @@ def get_notes_and_instruments(): #goal here is to get sequences based on instrum
                     #noteTuple = (instName, elem)
                     instrumentalNotes.append(elem)
 
-
+                    
 
 
 
@@ -74,7 +73,7 @@ def get_notes_and_instruments(): #goal here is to get sequences based on instrum
             if isinstance(element, note.Note):
                 noteTuple = (str(element.pitch), element.storedInstrument.instrumentName) #make tuple that store note pitch and instrument that's playing it.
                 notes.append(noteTuple)
-                #notes.append(str(element.pitch))
+               
 
             elif isinstance(element, chord.Chord):
                 noteTuple = ('.'.join(str(n) for n in element.normalOrder), element.storedInstrument.instrumentName) #make tuple that stores note pitches and instrument that's playing it.
@@ -83,17 +82,11 @@ def get_notes_and_instruments(): #goal here is to get sequences based on instrum
     #notes is now a list of tuples (notename, instrument) seen in training.
     with open ("notes", "wb") as filepath:
         pickle.dump(notes, filepath)
-
-
- #    rawPitchInstrumentNames = sorted(notes, key=lambda note: note[0])
-    # PitchesAndInstruments = set(rawPitchInstrumentNames) #This is now a set of tuples, each tuple is ("notename", instrument), where notename denotes pitch, and is a string.
-    # print (PitchesAndInstruments)
-    # with open('PitchesAndInstruments', 'wb') as filepath:
-    #   pickle.dump(PitchesAndInstruments, filepath)
-    # print (notes)
+            
+    
+ 
     return notes
 
-    #return PitchesAndInstruments
 
 
 def prepare_sequences_with_instruments(notes, n_vocab):
@@ -103,10 +96,10 @@ def prepare_sequences_with_instruments(notes, n_vocab):
     #get all pitch names and instruments. (Basically, get no duplicates.)
     rawPitchInstrumentNames = sorted(notes, key=lambda note: note[0])
     PitchesAndInstruments = set(rawPitchInstrumentNames) #This is now a set of tuples, each tuple is ("notename", instrument), where notename denotes pitch, and is a string.
-
+    
 
      # create a dictionary to map pitches+instruments to integers
-
+    
     pitchInstrument_to_int = dict ((pitchInstrument, number) for number, pitchInstrument in enumerate(PitchesAndInstruments)) #realize that here, each note is a tuple with the pitch and the instrument object (see PitchesAndInstruments above)
 
     network_input = []
@@ -121,19 +114,13 @@ def prepare_sequences_with_instruments(notes, n_vocab):
 
     n_patterns = len(network_input)
 
-    # print(network_input)
-    # network_input_lengths = [len(n) for n in network_input]
-    # print(len(set(network_input_lengths)))
     # reshape the input into a format compatible with LSTM layers
     network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 1))
     # normalize input
     network_input = network_input / float(n_vocab)
 
-    print(len(set(network_output)))
     network_output = np_utils.to_categorical(network_output)
 
-    print(network_input.shape)
-    print(network_output.shape)
     return (network_input, network_output)
 
 def create_network(network_input, n_vocab):
@@ -167,7 +154,7 @@ def train(model, network_input, network_output):
         mode='min'
     )
     callbacks_list = [checkpoint]
-
+    K.set_session(K.tf.Session(config=K.tf.ConfigProto(intra_op_parallelism_threads=10, inter_op_parallelism_threads=10)))
     model.fit(network_input, network_output, epochs=200, batch_size=64, callbacks=callbacks_list)
 
 if __name__ == '__main__':

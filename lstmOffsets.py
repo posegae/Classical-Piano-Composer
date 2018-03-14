@@ -17,7 +17,7 @@ def train_network():
     notes = get_notes_and_offsets()
 
     # get amount of pitch names
-    n_vocab = len(set(notes))
+    n_vocab = len(set([tuple(n) for n in notes]))
 
     network_input, network_output = prepare_sequences_with_offsets(notes, n_vocab)
 
@@ -46,27 +46,38 @@ def get_notes_and_offsets():
             if isinstance(element, note.Note):
                 pitch = str(element.pitch)
                 offset = element.offset - prev_note_offset
-                notes.append((pitch, offset))
+                notes.append([pitch, offset])
                 prev_note_offset += offset
             elif isinstance(element, chord.Chord):
                 pitches = '.'.join(str(n) for n in element.normalOrder)
                 offset = element.offset - prev_note_offset
-                notes.append((pitches, offset))
+                notes.append([pitches, offset])
                 prev_note_offset += offset
 
     with open('data/notes', 'wb') as filepath:
         pickle.dump(notes, filepath)
+
+    # print(notes)
 
     return notes
 
 def prepare_sequences_with_offsets(notes, n_vocab):
     ''' Prepare the sequences used by the NN. Adapted to account for offsets '''
     sequence_length = 100
-    raw_pitch_offset_names = sorted(notes, key=lambda x: x[0])
-    raw_pitch_offset_names = set(notes)
+    raw_pitch_offset_names = sorted([tuple(n) for n in notes], key=lambda x: x[0])
+    raw_pitch_offset_names = set(raw_pitch_offset_names)
 
-    # Dictionary that maps (pitch, offset) tuples to integers
-    pitch_offset_to_int = dict((raw_pitch_offset_names, number) for number, raw_pitch_offset_names in enumerate(raw_pitch_offset_names))
+    pitches = [n[0] for n in notes]
+    pitches = sorted(set(pitches))
+    offsets = [n[1] for n in notes]
+    offsets = sorted(set(offsets))
+
+
+    # dict that maps pitches to numbers
+    pitch_to_int = dict((pitches, number) for number, pitches in enumerate(pitches))
+
+    # dict that maps offset distances to numbers
+    offset_to_int = dict((offsets, number) for number, offsets in enumerate(offsets))
 
     network_input = []
     network_output = []
@@ -74,15 +85,20 @@ def prepare_sequences_with_offsets(notes, n_vocab):
     for i in range(0, len(notes) - sequence_length, 1):
         sequence_in = notes[i:i + sequence_length]
         sequence_out = notes[i + sequence_length]
-        network_input.append([pitch_offset_to_int[char] for char in sequence_in])
-        network_output.append(pitch_offset_to_int[sequence_out])
+        network_input.append([[pitch_to_int[char[0]], offset_to_int[char[1]]] for char in sequence_in])
+        network_output.append([pitch_to_int[sequence_out[0]], offset_to_int[sequence_out[1]]])
     n_patterns = len(network_input)
 
-    network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 1))
+    # the 2 on the end specifies that we have 2 dimensions, or features to look at.
+    #  in this particular file, they would be pitches and offset differences
+    network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 2))
 
     network_input = network_input / float(n_vocab)
 
-    network_output = np_utils.to_categorical(network_output)
+    # print(network_input.shape)
+    # network_output = np_utils.to_categorical(network_output)
+
+    # print(network_output)
 
     return (network_input, network_output)
 
